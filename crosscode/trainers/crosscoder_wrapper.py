@@ -20,20 +20,20 @@ TActivation = TypeVar("TActivation", bound=ActivationFunction)
 class CrosscoderWrapper(Generic[TActivation], ModelWrapper):
     def __init__(
         self,
-        model: ModelHookpointAcausalCrosscoder[TActivation],
+        crosscoder: ModelHookpointAcausalCrosscoder[TActivation],
         scaling_factors_MP: torch.Tensor,
         hookpoints: list[str],
         model_names: list[str],
         save_dir: Path,
     ):
-        self.crosscoder = model
+        self.crosscoder = crosscoder
         self.scaling_factors_MP = scaling_factors_MP
         self.hookpoints = hookpoints
         self.model_names = model_names
         self.save_dir = save_dir
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-        self.firing_tracker = FiringTracker(activation_size=model.n_latents, device=model.device)
+        self.firing_tracker = FiringTracker(activation_size=crosscoder.n_latents, device=crosscoder.device)
 
     def run_batc(
         self,
