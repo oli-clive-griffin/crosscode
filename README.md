@@ -61,7 +61,7 @@ The library is structured roughly as follows:
 - [`ModelHookpointAcausalCrosscoder`](./crosscode/models/acausal_crosscoder.py): An acausal crosscoder that can be applied across multiple models / layers.
     - with `n_layers = 1` and `n_models=2`, it's a normal model diffing crosscoder.
     - with `n_layers > 1` and `n_models=1`, it's a normal cross-layer acausal transcoder.
-    - with `n_layers > 1` and `n_models > 1`, it's a cross-layer cross-model acausal transcoder (???).
+    - with `n_layers > 1` and `n_models > 1`, it's a cross-layer, cross-model, acausal crosscoder (???).
 - [`CrossLayerTranscoder`](./crosscode/models/cross_layer_transcoder.py): A cross-layer acausal transcoder 
     - [`CompoundCrossLayerTranscoder`](./crosscode/models/compound_clt.py): A wrapper around a list of CrossLayerTranscoder that applies them in parallel, as described in the "[Circuit Tracing](https://transformer-circuits.pub/2025/attribution-graphs/methods.html)" paper.
 
