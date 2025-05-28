@@ -1,6 +1,6 @@
 # Crosscode
 
-A library for training crosscoders, and by extension, transcoders, SAEs, and other sparse coding models.
+A library for training crosscoders, and by extension, (cross-layer, skip) transcoders, SAEs, and other sparse coding models.
 
 
 ### Examples:
@@ -36,11 +36,11 @@ All sparse coding models are abstracted over activation functions, and losses ar
 
 #### Tensor Shapes
 This library makes extensive use of "[shape suffixes](https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd)" and einops to attempt to make the quite complex and varying tensor shapes a bit more manageable. The most common shapes are:
-- `B`: Batch
-- `M`: Models
-- `P`: Hookpoints (for example, different layers of the residual stream)
-- `L`: Latents (aka "features")
-- `D`: Model Dimension (aka `d_model`)
+- `B`: **B**atch
+- `M`: **M**odels
+- `P`: hook**P**oints (for example, different layers of the residual stream)
+- `L`: **L**atents (aka "features")
+- `D`: model **D**imension (aka `d_model`)
 - `X`: an arbitrary number of crosscoding dimensions (usually 0, 1, or 2 of them, such as `(n_models, n_layers)`)
 
 Shape suffixes should be interpretted in PascalCase, where lowercase denotes a more specific version of a shape. For example, [here](./crosscode/models/base_crosscoder.py#L51) we have `_W_enc_XiDiL` which means shape ("**I**nput **X**rosscoding dims, **I**nput **D**_model, **L**atents).
