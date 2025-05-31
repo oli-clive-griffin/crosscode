@@ -45,7 +45,7 @@ class ActivationsHarvester:
         self._layer_to_stop_at = self._get_layer_to_stop_at()
 
     def _get_layer_to_stop_at(self) -> int:
-        last_needed_layer = max(_get_layer(name) for name in self._hookpoints)
+        last_needed_layer = max(get_layer(name) for name in self._hookpoints)
         layer_to_stop_at = last_needed_layer + 1
         logger.info(f"computed last needed layer: {last_needed_layer}, stopping at {layer_to_stop_at}")
         return layer_to_stop_at
@@ -89,7 +89,7 @@ class ActivationsHarvester:
         return activations_HSMPD
 
 
-def _get_layer(hookpoint: str) -> int:
+def get_layer(hookpoint: str) -> int:
     if "blocks" not in hookpoint:
         raise NotImplementedError(
             f'Hookpoint "{hookpoint}" is not a blocks hookpoint, cannot determine layer, (but feel free to add this functionality!)'

@@ -1,18 +1,22 @@
-import fire  # type: ignore
+from typing import cast
 
+import fire  # type: ignore
+import torch
+from transformer_lens.components.mlps.mlp import MLP
+from transformer_lens.components.transformer_block import TransformerBlock
+
+from crosscode.data.activation_harvester import get_layer
 from crosscode.data.activations_dataloader import build_model_hookpoint_dataloader
 from crosscode.llms import build_llms
 from crosscode.log import logger
-from crosscode.models import AnthropicTransposeInit, ModelHookpointAcausalCrosscoder, TopkActivation
-from crosscode.models.activations.topk import BatchTopkActivation, GroupMaxActivation
-from crosscode.trainers.base_trainer import run_exp
+from crosscode.models.acausal_crosscoder import RichReLUTranscoder, RichTranscoderWrapper
 from crosscode.trainers.topk_crosscoder.config import TopKAcausalCrosscoderExperimentConfig
-from crosscode.trainers.topk_crosscoder.trainer import TopKStyleAcausalCrosscoderTrainer
+from crosscode.trainers.trainer import Trainer, run_exp
 from crosscode.trainers.utils import build_wandb_run
 from crosscode.utils import get_device
 
 
-def build_trainer(cfg: TopKAcausalCrosscoderExperimentConfig) -> TopKStyleAcausalCrosscoderTrainer:
+def build_trainer(cfg: TopKAcausalCrosscoderExperimentConfig) -> Trainer:
     device = get_device()
 
     llms = build_llms(
@@ -22,28 +26,56 @@ def build_trainer(cfg: TopKAcausalCrosscoderExperimentConfig) -> TopKStyleAcausa
         inferenced_type=cfg.data.activations_harvester.inference_dtype,
     )
 
-    match cfg.train.topk_style:
-        case "topk":
-            cc_act = TopkActivation(k=cfg.crosscoder.k)
-        case "batch_topk":
-            cc_act = BatchTopkActivation(k_per_example=cfg.crosscoder.k)
-        case "groupmax":
-            cc_act = GroupMaxActivation(k_groups=cfg.crosscoder.k, latents_size=cfg.crosscoder.n_latents)
+    # match cfg.train.topk_style:
+    #     case "topk":
+    #         cc_act = TopkActivation(k=cfg.crosscoder.k)
+    #     case "batch_topk":
+    #         cc_act = BatchTopkActivation(k_per_example=cfg.crosscoder.k)
+    #     case "groupmax":
+    #         cc_act = GroupMaxActivation(k_groups=cfg.crosscoder.k, latents_size=cfg.crosscoder.n_latents)
 
+    
     d_model = llms[0].cfg.d_model
 
-    crosscoder = ModelHookpointAcausalCrosscoder(
-        n_models=len(llms),
-        n_hookpoints=len(cfg.hookpoints),
-        d_model=d_model,
-        n_latents=cfg.crosscoder.n_latents,
-        init_strategy=AnthropicTransposeInit(dec_init_norm=cfg.crosscoder.dec_init_norm),
-        activation_fn=cc_act,
-        use_encoder_bias=cfg.crosscoder.use_encoder_bias,
-        use_decoder_bias=cfg.crosscoder.use_decoder_bias,
+    d_hidden = llms[0].cfg.d_mlp
+
+    # tc = RichSwiGLUTranscoderWrapper(
+    #     model=RichSwiGLUTranscoder(
+
+
+    assert len(cfg.hookpoints) == 2
+    layer_idx = get_layer(cfg.hookpoints[0])
+    block = cast(TransformerBlock, llms[0].blocks[layer_idx])
+    layer = cast(MLP, block.mlp)
+
+    tc = RichTranscoderWrapper(
+        model=RichReLUTranscoder(
+            d_model=d_model,
+            d_hidden=d_hidden,
+            n_latents=cfg.crosscoder.n_latents,
+            k=cfg.crosscoder.k,
+            # latent_activation_fn=cc_act,
+            ref_W_in=layer.W_in,
+        )
     )
 
-    crosscoder = crosscoder.to(device)
+
+    # with torch.no_grad():
+    #     tc.model.mlp_W_up_DH.copy_(layer.W_in)
+    #     tc.model.sparse_dec_LD.normal_()
+    #     tc.model.sparse_enc_HL.normal_()
+
+    llms_cfg = cfg.data.activations_harvester.llms
+    assert len(llms_cfg) == 1
+    llm_cfg = llms_cfg[0]
+    assert llm_cfg.name is not None
+    # assert llm_cfg.name.startswith("google/gemma-2")
+
+    # if cfg.train.k_aux is None:
+    #     cfg.train.k_aux = d_model // 2
+    #     logger.info(f"defaulting to k_aux={cfg.train.k_aux} for crosscoder (({d_model=}) // 2)")
+
+    wandb_run = build_wandb_run(cfg)
 
     dataloader = build_model_hookpoint_dataloader(
         cfg=cfg.data,
@@ -53,19 +85,17 @@ def build_trainer(cfg: TopKAcausalCrosscoderExperimentConfig) -> TopKStyleAcausa
         cache_dir=cfg.cache_dir,
     )
 
-    if cfg.train.k_aux is None:
-        cfg.train.k_aux = d_model // 2
-        logger.info(f"defaulting to k_aux={cfg.train.k_aux} for crosscoder (({d_model=}) // 2)")
-
-    wandb_run = build_wandb_run(cfg)
-
-    return TopKStyleAcausalCrosscoderTrainer(
-        cfg=cfg.train,
+    return Trainer(
         activations_dataloader=dataloader,
-        model=crosscoder,
+        model=tc,
+        optimizer_cfg=cfg.train.optimizer,
         wandb_run=wandb_run,
-        device=device,
-        save_dir=cfg.save_dir,
+        # make this into a "train loop cfg"?
+        num_steps=cfg.train.num_steps,
+        gradient_accumulation_microbatches_per_step=cfg.train.gradient_accumulation_microbatches_per_step,
+        save_every_n_steps=cfg.train.save_every_n_steps,
+        log_every_n_steps=cfg.train.log_every_n_steps,
+        upload_saves_to_wandb=cfg.train.upload_saves_to_wandb,
     )
 
 
